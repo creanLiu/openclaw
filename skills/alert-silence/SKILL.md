@@ -5,14 +5,7 @@ user-invocable: true
 command: silence
 command-description: "静默超过指定时间的告警"
 metadata:
-  {
-    "openclaw":
-      {
-        "emoji": "🔕",
-        "primaryEnv": "ALERT_DB_HOST",
-        "requires": { "bins": ["mysql"] },
-      },
-  }
+  { "openclaw": { "emoji": "🔕" } }
 ---
 
 # Alert Silence Skill

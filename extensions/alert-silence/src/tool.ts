@@ -3,7 +3,6 @@ import { resolveDbConfig, resolveDefaultMinutes, silenceAlerts } from "./db.js";
 
 export type AlertSilencePluginConfig = Record<string, unknown> | undefined;
 
-// Plain JSON Schema — avoids runtime dependency on @sinclair/typebox
 const AlertSilenceSchema = {
   type: "object" as const,
   properties: {
@@ -19,6 +18,13 @@ const AlertSilenceSchema = {
     },
   },
 };
+
+function jsonResult(payload: unknown) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
+    details: payload,
+  };
+}
 
 export function createAlertSilenceTool(pluginCfg: AlertSilencePluginConfig) {
   const defaultMinutes = resolveDefaultMinutes(pluginCfg);
@@ -38,14 +44,11 @@ export function createAlertSilenceTool(pluginCfg: AlertSilencePluginConfig) {
 
       const dbCfg = resolveDbConfig(pluginCfg);
       if (!dbCfg.database) {
-        return {
-          type: "json" as const,
-          content: {
-            status: "error",
-            error:
-              "Database not configured. Set plugins.entries.alert-silence.config.db in ~/.openclaw/openclaw.json or ALERT_DB_NAME env var.",
-          },
-        };
+        return jsonResult({
+          status: "error",
+          error:
+            "Database not configured. Set plugins.entries.alert-silence.config.db in ~/.openclaw/openclaw.json or ALERT_DB_NAME env var.",
+        });
       }
 
       let conn;
@@ -61,24 +64,21 @@ export function createAlertSilenceTool(pluginCfg: AlertSilencePluginConfig) {
 
         const result = await silenceAlerts(conn, minutes, dryRun);
 
-        return {
-          type: "json" as const,
-          content: {
-            status: "ok",
-            dry_run: dryRun,
-            minutes,
-            matched_count: result.matchedCount,
-            affected_rows: result.affectedRows,
-            message: dryRun
-              ? `[预览] 发现 ${result.matchedCount} 条超过 ${minutes} 分钟的待处理告警`
-              : result.affectedRows > 0
-                ? `已静默 ${result.affectedRows} 条超过 ${minutes} 分钟的告警`
-                : `没有需要静默的超时告警（窗口: ${minutes} 分钟）`,
-          },
-        };
+        return jsonResult({
+          status: "ok",
+          dry_run: dryRun,
+          minutes,
+          matched_count: result.matchedCount,
+          affected_rows: result.affectedRows,
+          message: dryRun
+            ? `[预览] 发现 ${result.matchedCount} 条超过 ${minutes} 分钟的待处理告警`
+            : result.affectedRows > 0
+              ? `已静默 ${result.affectedRows} 条超过 ${minutes} 分钟的告警`
+              : `没有需要静默的超时告警（窗口: ${minutes} 分钟）`,
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        return { type: "json" as const, content: { status: "error", error: `Database error: ${msg}` } };
+        return jsonResult({ status: "error", error: `Database error: ${msg}` });
       } finally {
         await conn?.end().catch(() => {});
       }

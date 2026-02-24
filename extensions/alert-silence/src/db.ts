@@ -37,28 +37,30 @@ export async function silenceAlerts(
   minutes: number,
   dryRun: boolean,
 ): Promise<SilenceResult> {
-  const cutoffMs = Date.now() - minutes * 60 * 1000;
+  // Compute cutoff entirely in SQL to avoid JS→MySQL bigint parameter issues.
+  // UNIX_TIMESTAMP() returns seconds; alert_time is milliseconds.
+  const countSql = `
+    SELECT COUNT(*) AS cnt FROM alert_records
+    WHERE alert_time < (UNIX_TIMESTAMP() * 1000 - ? * 60 * 1000)
+      AND status NOT IN ('已忽略', '已完成')`;
 
-  const [countRows] = await conn.execute<import("mysql2").RowDataPacket[]>(
-    `SELECT COUNT(*) AS cnt FROM alert_records
-     WHERE alert_time < ? AND status NOT IN ('已忽略', '已完成')`,
-    [cutoffMs],
-  );
+  const [countRows] = await conn.execute(countSql, [minutes]);
   const matchedCount = Number((countRows as Array<{ cnt: number }>)[0]?.cnt ?? 0);
 
   if (dryRun || matchedCount === 0) {
     return { matchedCount, affectedRows: 0 };
   }
 
-  const nowMs = Date.now();
-  const [result] = await conn.execute<import("mysql2").ResultSetHeader>(
-    `UPDATE alert_records
-     SET status = '已忽略', ignore_time = ?
-     WHERE alert_time < ? AND status NOT IN ('已忽略', '已完成')`,
-    [nowMs, cutoffMs],
-  );
+  const updateSql = `
+    UPDATE alert_records
+    SET status = '已忽略', ignore_time = UNIX_TIMESTAMP() * 1000
+    WHERE alert_time < (UNIX_TIMESTAMP() * 1000 - ? * 60 * 1000)
+      AND status NOT IN ('已忽略', '已完成')`;
 
-  return { matchedCount, affectedRows: result.affectedRows };
+  const [result] = await conn.execute(updateSql, [minutes]);
+  const affectedRows = (result as { affectedRows?: number }).affectedRows ?? 0;
+
+  return { matchedCount, affectedRows };
 }
 
 function stringOr(primary: unknown, envVal: string | undefined, fallback: string): string {

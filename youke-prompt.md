@@ -612,3 +612,94 @@ NODE_ENV=production
 12. 小程序前端开发
 
 先完成 1-9，实现"车商在微信里和 AI 助手对话"的完整链路，这是 MVP 的核心。
+
+---
+
+## 现有项目参考
+
+有一个现有的二手车小程序项目可以参考（技术栈不同，不能直接复制代码，但设计和数据结构可以参考）。
+
+项目地址：https://github.com/creanLiu/ershouche.git
+
+### 现有项目结构
+
+```
+ershouche/
+├── usedcar-miniapp/    # 微信原生小程序（WXML/WXSS/JS）14个页面
+├── usedcar-server/     # Java Spring Boot 后端
+├── usedcar-admin/      # Vue3 + Element Plus 管理后台
+└── deploy/             # Docker Compose + MySQL init.sql
+```
+
+### 可参考的内容
+
+1. **`deploy/sql/init.sql`** — 数据库表结构设计，customer、customer_followup、vehicle 等表的字段定义可直接作为新项目数据库设计的基础
+2. **`usedcar-admin/src/mock/`** — 数据模型的 TypeScript 接口定义（Vehicle、Customer、Order 等）
+3. **`usedcar-admin/src/views/customer/index.vue`** — 客户管理页面的筛选、列表、详情抽屉设计模式
+4. **`usedcar-admin/src/views/vehicle/`** — 车源管理页面和表单弹窗设计
+5. **`usedcar-miniapp/app.wxss`** — CSS 设计变量（颜色体系、间距、阴影、组件样式），可移植到 UniApp 全局样式
+6. **`usedcar-miniapp/pages/vehicle-list/`** — 车辆列表筛选逻辑（品牌/价格/车龄/里程/排序）
+7. **`usedcar-miniapp/pages/vehicle-detail/`** — 车辆详情页布局（图片轮播+参数卡片+底部操作栏）
+8. **`usedcar-miniapp/services/request.js`** — HTTP 请求封装模式（Token 注入、401 重定向）
+
+注意：现有项目是 Java Spring Boot + 微信原生小程序，新项目是 Node.js + UniApp，代码不能直接复制，只参考设计思路和数据结构。
+
+### 小程序双端设计
+
+新项目的小程序包含**买家端**和**销售端**两套界面，共用一个小程序，通过登录角色切换：
+
+#### 买家端（默认界面，不登录即可浏览）
+
+买家端的页面设计参考现有 `usedcar-miniapp` 的页面，保持类似的布局和交互：
+
+```
+底部 Tab：首页 | 找车 | 推荐 | 我的
+
+- 首页：轮播 + 品牌列表（横向滚动，带车标 Logo）+ 公告 + 推荐车源
+  → 参考 usedcar-miniapp/pages/index/
+- 找车：筛选面板（品牌/价格区间/车龄/里程）+ 排序 + 车源卡片列表 + 分页加载
+  → 参考 usedcar-miniapp/pages/vehicle-list/
+- 推荐：推荐/热门车源列表
+  → 参考 usedcar-miniapp/pages/special/
+- 车辆详情：图片轮播 + 品牌车型价格 + 参数表 + 卖点描述 + 底部操作栏（在线咨询/预约看车/拨打电话）
+  → 参考 usedcar-miniapp/pages/vehicle-detail/，底部操作栏增加咨询和预约按钮
+- 搜索：搜索框 + 搜索历史 + 热门搜索 + 搜索建议
+  → 参考 usedcar-miniapp/pages/search/
+- 我的（买家版）：头像昵称 + 收藏 + 浏览记录 + 我的咨询 + 我的预约
+  → 参考 usedcar-miniapp/pages/profile/
+
+买家端所有车源数据通过 /api/shop/:tenantId/ 接口获取。
+买家通过分享链接或小程序码进入时，URL 中携带 tenantId，只看到该商户的车源。
+```
+
+#### 销售端（商户员工登录后切换到此界面）
+
+销售端是全新的界面，TabBar 完全不同：
+
+```
+底部 Tab：工作台 | 客户 | 车源 | AI工具 | 我的
+
+这些页面的详细结构见上方"小程序页面结构"章节。
+```
+
+#### 角色切换机制
+
+```
+用户点"我的" → 点"登录"
+  ↓
+微信登录获取 openid
+  ↓
+调用 /api/auth/mp-login → 后端检查 employees 表
+  ↓
+如果 openid 匹配到某个 employee → 返回 JWT（role: staff）→ 切换到销售端 TabBar
+如果没有匹配 → 返回 JWT（role: buyer）→ 保持买家端 TabBar
+  ↓
+切换 TabBar 使用 UniApp 的自定义 TabBar 组件，根据 role 渲染不同的 Tab 列表和页面
+```
+
+### 管理后台（第三阶段复用）
+
+第三阶段需要运营后台时，可以直接从 `usedcar-admin` 目录复制过来修改：
+- 保留：整体布局（AdminLayout）、登录页、请求封装、状态管理、ECharts 图表
+- 修改：菜单项、接口地址、数据模型
+- 新增：租户管理页、Token 用量监控页、Prompt 模板管理页
